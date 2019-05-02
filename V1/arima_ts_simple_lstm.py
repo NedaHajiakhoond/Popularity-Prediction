@@ -1,0 +1,465 @@
+import pandas as pd
+import os.path
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from numpy import array
+from keras.models import load_model
+import matplotlib.pyplot as plt
+
+from keras.layers import Dense
+from keras.layers import LSTM
+from numpy import array
+from keras.models import load_model
+import math
+from sklearn.metrics import mean_squared_error
+import sys
+from statsmodels.tsa.arima_model import ARIMA
+
+def error_plotting(true,predicted1,predicted2):#,ls):
+	n=1
+	#f, ax = plt.subplots(n,sharex=True)
+
+	for i in range (0,n):
+		plt.plot(true[i,:])
+		plt.plot(predicted1[i,:],label='LSTM')
+		plt.plot(predicted2[i,:],label='ARIMA')
+
+		#ax[i-2].plot(ls[i,:])
+	plt.ylabel('Number of events')
+	plt.xlabel('Repository')
+	plt.legend(loc=2)
+	plt.show()
+
+def data_plotting(data):
+	plt.subplot(1,2,1)
+	#for i in range (10):
+	plt.plot(data[5,:])
+	plt.subplot(1,2,2)
+	plt.plot(data[9,:])
+	plt.show()
+	sys.exit(0)
+
+
+def simple_lstm(train,test,Datatrain,Datatest,ws):
+	print('in lstm')
+
+	y = Datatrain[ws:,:]
+	X=train[:-ws,:]
+
+	testy = Datatest[ws:,:]
+	testX=test[:-ws,:]
+	print(y.shape)
+	print(X.shape)
+	print(testX.shape)
+	from sklearn import preprocessing
+	from sklearn.preprocessing import StandardScaler
+	scalerX = StandardScaler().fit(X)
+	scalery= StandardScaler().fit(y)
+	X = scalerX.transform(X)
+	y= scalery.transform(y)
+	scalertestX = StandardScaler().fit(testX)
+	scalertesty= StandardScaler().fit(testy)
+	testX = scalertestX.transform(testX)
+	testy = scalertesty.transform(testy)
+	print('y:',np.shape(y))
+	X = X.reshape(  X.shape[0],1,ws*Data.shape[1])
+	y = y.reshape(  y.shape[0], 1,y.shape[1])
+
+	testX = testX.reshape(  testX.shape[0],1,ws*Data.shape[1])
+	testy = testy.reshape(  testy.shape[0], 1, testy.shape[1])
+	print(X.shape)
+	print(y.shape)
+
+	#x = np.arange(0, 4, 0.1)
+	#X, y = x, np.sin(3*x)#seq[:, 0], np.sin(5*seq[:, 0])
+	#print(y)
+	#X = X.reshape((len(X), 1, 1))
+
+	from keras import optimizers
+	# define model
+	model = Sequential()
+	model.add(LSTM(100,return_sequences=True, input_shape=(1,X.shape[2])))
+	model.add(LSTM(100,return_sequences=True, input_shape=(1,X.shape[2])))
+	model.add(LSTM(100,return_sequences=True, input_shape=(1,X.shape[2])))
+
+	model.add(Dense(y.shape[2], activation='softmax'))
+	sgd = optimizers.SGD(lr=0.001, decay=1e-3, momentum=0.9, nesterov=True)
+	# compile model
+	model.compile(loss='mean_squared_error', optimizer='adam')
+	model.fit(X, y, epochs=1*8000, shuffle=False, verbose=0)
+	'''
+	yhat = model.predict(X, verbose=0)
+	yhat_ = scalery.inverse_transform(yhat)
+	print(yhat)
+	#plt.plot(yhat)
+	#plt.show()
+	'''
+	# make predictions
+	trainPredict = model.predict(X)
+	testPredict = model.predict(testX)
+	#print('$$$$$$$$$$$$$trainY shape:', testPredict.shape)
+	#print('$$$$$$$$$$$$$trainPredict shape:', trainPredict.shape)
+	y= y.reshape(  y.shape[0], y.shape[2])
+	trainPredict = trainPredict.reshape(  trainPredict.shape[0], trainPredict.shape[2])
+	testY= testy.reshape(  testy.shape[0], testy.shape[2])
+	testPredict = testPredict.reshape(testPredict.shape[0], testPredict.shape[2])
+	#sys.exit(0)
+	# invert predictions
+	trainPredict = scalery.inverse_transform(trainPredict)
+	trainY = scalery.inverse_transform(y)
+	testPredict = scalertesty.inverse_transform(testPredict)
+	testY = scalertesty.inverse_transform(testY)
+	# calculate root mean squared error
+	#print('$$$$$$$$$$$$$trainY shape:', trainY.shape)
+	#print('$$$$$$$$$$$$$trainPredict shape:', trainPredict.shape)
+	#trainY= trainY.reshape(  trainY.shape[0], ws*trainY.shape[2])
+	#trainPredict = trainPredict.reshape(  trainPredict.shape[0], ws*trainPredict.shape[2])
+	trainScore = math.sqrt(mean_squared_error(trainY, trainPredict))
+	print('Train Score: %.2f RMSE' % (trainScore))
+	#testY= testY.reshape(  testY.shape[0], ws*testY.shape[2])
+	#testPredict = testPredict.reshape(testPredict.shape[0], ws*testPredict.shape[2])
+	testScore = math.sqrt(mean_squared_error(testY, testPredict))
+	print('Test Score: %.2f RMSE' % (testScore))
+	np.savetxt('test.csv',testY)
+	np.savetxt('testPredict.csv',testPredict)
+	#error_plotting(testY, testPredict)
+	#error_plotting(testY,testPredict)
+	return testScore,testPredict
+
+
+def vector_moving_average(a, n) :
+	#print('a: ',a)
+	ret = np.cumsum(a, dtype=float)
+	ret[n:] = ret[n:] - ret[:-n]
+	return ret[n:] / n
+
+def moving_average(A,n):
+	B = np.zeros((A.shape[0],A.shape[1]-n))
+	for i in range(A.shape[0]):
+		B[i,:] = vector_moving_average(A[i,:],n)
+	#print(B)
+
+	return B
+
+def monthly_plotting(Datatest,A,L,Ari,w):
+	print(np.shape(A))
+	print(np.shape(L))
+	print(np.shape(Datatest))
+	B = np.zeros((3,A.shape[0]))
+	for t in range(0,A.shape[0]):
+		B[0,t] = math.sqrt(mean_squared_error(Datatest[t,:], A[t,:])/A.shape[1])
+		B[1,t] = math.sqrt(mean_squared_error(Datatest[t,:], L[t,:])/A.shape[1])
+		B[2,t] = math.sqrt(mean_squared_error(Datatest[t,:], Ari[t,:])/A.shape[1])
+
+	#print(B)
+	np.savetxt('Tabels/monthly-55-MV.txt',B[0],delimiter=',')
+	np.savetxt('Tabels/monthly-55-LSTM.txt',B[1],delimiter=',')
+	np.savetxt('Tabels/monthly-55-Arima.txt',B[2],delimiter=',')
+
+	#plt.plot(range(0,A.shape[0]),B[0] ,label='MV', color='blue', linestyle='dashed', marker='o', markerfacecolor='blue', markersize=5,)
+	plt.plot(range(0,A.shape[0]),B[1] ,label='LSTM', color='blue', linestyle='dashed', marker='o', markerfacecolor='red', markersize=5,)
+	plt.plot(range(0,A.shape[0]),B[2] ,label='ARIMA', color='blue', linestyle='dashed', marker='o', markerfacecolor='green', markersize=5,)
+
+	plt.ylabel('RMSEt')
+	plt.xlabel('Time step')
+	plt.legend(loc=2)
+	plt.show()
+	#import sys
+	#sys.exit(0)
+	return B
+
+def repo_plotting(Datatest,A,L,Ari,w):
+	print(np.shape(A))
+	print(np.shape(L))
+	print(np.shape(Datatest))
+	B = np.zeros((3,A.shape[1]))
+	for r in range(0,A.shape[1]):
+		B[0,r] = math.sqrt(mean_squared_error(Datatest[:,r], A[:,r])/A.shape[0])
+		B[1,r] = math.sqrt(mean_squared_error(Datatest[:,r], L[:,r])/A.shape[0])
+		B[2,r] = math.sqrt(mean_squared_error(Datatest[:,r], Ari[:,r])/A.shape[0])
+
+	#print(B)
+	np.savetxt('Tabels/repo-55-MV.txt',B[0,1:],delimiter=',')
+	np.savetxt('Tabels/repo-55-LSTM.txt',B[1,1:],delimiter=',')
+	np.savetxt('Tabels/repo-55-Arima.txt',B[2,1:],delimiter=',')
+	#plt.plot(range(1,A.shape[1]),B[0,1:] ,label='MA', color='blue', linestyle='dashed', marker='o', markerfacecolor='blue', markersize=5,)
+	plt.plot(range(1,A.shape[1]),B[1,1:] ,label='LSTM', color='blue', linestyle='dashed', marker='o', markerfacecolor='red', markersize=5,)
+	plt.plot(range(1,A.shape[1]),B[2,1:] ,label='ARIMA', color='blue', linestyle='dashed', marker='o', markerfacecolor='green', markersize=5,)
+
+	plt.ylabel('RMSEr')
+	plt.xlabel('Time step')
+	plt.legend(loc=2)
+	plt.show()
+	import sys
+	sys.exit(0)
+	return B
+
+def arima(trainX,testX,p=5,d=1,q=0):
+	from statsmodels.tsa.arima_model import ARIMA
+	trainX = trainX.astype('float32')
+	testX = testX.astype('float32')
+	predict_arr=[]
+	for i in range(trainX.shape[0]):
+		train = trainX[i,:]
+		test= testX[i,:]
+		history = [x for x in train]
+		predictions = list()
+		for t in range(len(test)):
+			model = ARIMA(history, order=(5,1,0))
+			model_fit = model.fit(disp=0)
+			output = model_fit.forecast()
+			yhat = output[0]
+			predictions.append(yhat)
+			obs = test[t]
+			history.append(obs)
+			#print('predicted=%f, expected=%f' % (yhat, obs))
+		error = mean_squared_error(test, predictions)
+		print('Test MSE: %.3f' % error)
+		# plot
+		predict_arr.append(predictions)
+	predict_arr = np.array(predict_arr)
+	predict_arr = predict_arr.reshape(testX.shape[0],testX.shape[1])
+	print(predict_arr.shape)
+	return predict_arr
+####### Data preparing
+
+
+np.random.seed(7)
+Dir = '/home/social-sim/Documents/SocialSimCodeTesting/Pop_MLearning/10days166-100repos-watch/'
+Fls = os.listdir(Dir)
+Data = []
+print(len(Fls))
+
+
+for _,f in enumerate(Fls):
+	data = pd.read_csv(Dir + f)
+	#print(len(data))
+	Data.append(data.ix[:,1].tolist())
+Data = np.array(Data)
+print(Data.shape)
+#data_plotting(Data)k
+mv_errors=[]
+ls_errors=[]
+window_size=7
+for w in range(6,window_size):
+	print('w:',w)
+
+	newData=Data
+
+	for window in range(1,w+1):
+		shifted_Data = np.roll(Data,1,axis=0)
+		newData = np.hstack((newData,shifted_Data))
+	#
+	#newData = np.reshape(Data,(Data.shape[0],window_size,Data.shape[1]))
+	#newData=Data
+	#window_size=i
+	train_size = int(len(newData) * 0.80)
+	test_size = len(newData) - train_size
+	train, test = newData[0:train_size,:], newData[train_size:len(newData),:]
+	Datatrain, Datatest = Data[0:train_size,:], Data[train_size:len(Data),:]
+	ari = arima(np.transpose(Datatrain),np.transpose(Datatest))
+	m,ls_d= simple_lstm(train,test,Datatrain,Datatest,w+1)
+	#m,ls_d= simple_lstm(train,test,Datatrain,Datatest,7)
+
+	print(m)
+	print('newData:',Datatest.shape)
+	ls_errors.append(m)
+	#mv_d= moving_average(np.transpose(Datatest),w+1)
+	mv_d= moving_average(np.transpose(Datatest),w+1)
+
+	a=math.sqrt(mean_squared_error((np.transpose(Datatest))[:,w+1:], mv_d))
+	mv_errors.append(a)
+	print('Datatest[w+1:,:]:',Datatest[w+1:,:].shape)
+	print('np.transpose(mv_d):',np.transpose(mv_d).shape)
+	print('ls_d:',ls_d.shape)
+	print('np.transpose(ari):',np.transpose(ari).shape)
+	ar=math.sqrt(mean_squared_error(Datatest[w+1:,:], np.transpose(ari)[w+1:,:]))
+	print('window:', w)
+	print('mean_error_MV:',a)
+	print('mean_error_LSTM:',m)
+	print('mean_error_ARIMA:',ar)
+	#error_plotting(Datatest[w+1:,:],ls_d,np.transpose(ari)[w+1:,:])
+
+	monthly_plotting(Datatest[w+1:,:],np.transpose(mv_d),ls_d,np.transpose(ari)[w+1:,:],w)
+	repo_plotting(Datatest[w+1:,:],np.transpose(mv_d),ls_d,np.transpose(ari)[w+1:,:],w)
+
+print(ls_errors)
+plt.plot(range(1,window_size),mv_errors,label='Moving average', color='blue', linestyle='dashed', marker='o', markerfacecolor='blue', markersize=5,)
+plt.plot(range(1,window_size),ls_errors,label='LSTM', color='blue', linestyle='dashed', marker='o', markerfacecolor='red', markersize=5,)
+plt.ylabel('RMSE')
+plt.xlabel('Window size')
+plt.legend(loc=2)
+plt.show()
+'''
+train_size = int(len(newData) * 0.80)
+test_size = len(newData) - train_size
+train, test = newData[0:train_size,:], newData[train_size:len(newData),:]
+Datatrain, Datatest = Data[0:train_size,:], Data[train_size:len(Data),:]
+
+'''
+'''
+m =moving_average(Data,window_size)
+l=simple_lstm(train,test,Datatrain,Datatest,window_size+1)
+t=test[1:,:]
+for i in range(newData.shape[0]):
+	m =mean_squared_error(t[i:,:], m[i,:])   # window size toolstmlahaz kon
+	l=mean_squared_error(t[i,:], l[i,:])
+	#print(i,':',l)
+	#print(i,'   ',m)
+	ls_errors.append(l)
+	mv_errors.append(m)
+plt.plot([i for i in range(newData.shape[0])],mv_errors,label='Moving average', color='blue', linestyle='dashed', marker='o', markerfacecolor='blue', markersize=5,)
+plt.plot([i for i in range(newData.shape[0])],ls_errors,label='LSTM', color='blue', linestyle='dashed', marker='o', markerfacecolor='red', markersize=5,)
+plt.ylabel('MSE')
+plt.xlabel('Window size')
+plt.legend(loc=2)
+plt.show()
+sys.exit(0)
+'''
+'''
+s=2
+e=12
+
+for i in range(s,e):
+	newData=Data
+	window_size=i
+	for window in range(1,window_size+1):
+		shifted_Data = np.roll(Data,1,axis=0)
+		newData = np.hstack((newData,shifted_Data))
+	#
+	#newData = np.reshape(Data,(Data.shape[0],window_size,Data.shape[1]))
+	print(newData.shape)
+	train_size = int(len(newData) * 0.80)
+	test_size = len(newData) - train_size
+	train, test = newData[0:train_size,:], newData[train_size:len(newData),:]
+
+	m =mean_squared_error(Data[:,i-1:], moving_average(Data,i))/Data.shape[1]
+	l=simple_lstm(train,test,Data,window_size+1)/window_size
+	#print(i,':',l)
+	#print(i,'   ',m)
+	ls_errors.append(l)
+	mv_errors.append(m)
+
+	#print(np.shape( moving_average(Data,i)))
+	#print(np.shape(Data[:,np.shape(Data)[1]-1:]))
+print(mv_errors)
+print(ls_errors)
+plt.plot(range(s,e),mv_errors,label='Moving average', color='blue', linestyle='dashed', marker='o', markerfacecolor='blue', markersize=5,)
+plt.plot(range(s,e),ls_errors,label='LSTM', color='blue', linestyle='dashed', marker='o', markerfacecolor='red', markersize=5,)
+plt.ylabel('MSE')
+plt.xlabel('Window size')
+plt.legend(loc=2)
+plt.show()
+
+'''
+''''
+
+#
+#print(np.shape(Data))
+#Data = Data.T
+#Data = Data[~(Data==0).all(1)]
+#Data = Data.T
+
+train_size = int(len(Data) * 0.80)
+test_size = len(Data) - train_size
+train, test = Data[0:train_size,:], Data[train_size:len(Data),:]
+#ls=simple_lstm(train,test)
+#mv=moving_average(Data)
+#ls=moving_average(Data*1.5)
+#error_plotting(Data,mv,ls)
+#data_plotting(Data)
+errors=[]
+a = moving_average(Data,3)
+data_plotting(Data)
+plt.show()
+for i in range(3,50):
+	errors.append(mean_squared_error(Data[:,i-1:], moving_average(Data,i))/Data.shape[1])
+	print(np.shape( moving_average(Data,i)))
+	print(np.shape(Data[:,np.shape(Data)[1]-1:]))
+plt.plot(errors)
+plt.ylabel('MSE')
+plt.xlabel('Window size')
+
+'''
+def outdated():
+	'''
+
+	#print('total time:', (time.time() - t1)/60)
+
+	df = pd.read_csv('/home/social-sim/Desktop/SocialSimCodeTesting/Pop_MLearning/10days100repo-fork/2015-02-1.csv')
+	df=df.loc[df['2015-02-1']>0]
+	#dfList = df[]
+	files =[]
+	for i in range(0,9):
+		for j in range(0,4):
+				files.append('10days100repo-fork/2015-0%d-%d.csv' %(i,j))
+	#print(files)
+	for i in files:
+		if os.path.isfile(i):
+			print('%s is' %i)
+			df2=pd.read_csv(i)
+			df = pd.merge(df,df,on='name_h')
+
+	df.to_csv('merged_files.csv',index=False)
+	print(Data.shape)
+	f, ax = plt.subplots(10,sharex=True)
+	for i in range(10):
+		ax[i].plot(Data[:,i])
+	plt.show()
+
+		# return training data
+	def get_train():
+			seq = [[0.0, 0.1], [0.1, 0.2], [0.2, 0.3], [0.3, 0.4], [0.4, 0.5]]
+			seq = array(seq)
+			X, y = seq[:, 0], seq[:, 1]
+			X = X.reshape((len(X), 1, 1))
+			return X, y
+
+	# define model
+	model = Sequential()
+	model.add(LSTM(200, input_shape=(1,1)))
+	model.add(Dense(1, activation='linear'))
+	# compile model
+	model.compile(loss='mse', optimizer='adam')
+	# fit model
+	X,y = get_train()
+	model.fit(X, y, epochs=300, shuffle=False, verbose=0)
+	# save model to single file
+	model.save('lstm_model.h5')
+
+	# snip...
+	# later, perhaps run from another script
+
+	# load model from single file
+	model = load_model('lstm_model.h5')
+	# make predictions
+	yhat = model.predict(X, verbose=0)
+	print(yhat)
+	plt.plot(y)
+	plt.plot(yhat)
+	plt.show()
+
+
+	window = 2
+Mv = Data[:,:window]
+e = []
+print(Mv.shape)
+for i in range(window, Data.shape[1]):
+	Mean = np.mean(Data[:, i-window:i], axis = 1)
+	Mv=np.c_[Mv, Mean]
+	error = np.linalg.norm(Mv[:,i]-Data[:,i],2)
+	e.append(error)
+print((e))
+print(Mv.shape)
+plt.plot(Mv[0,:])
+plt.plot(Data[0,:])
+plt.figure()
+plt.plot(e)
+plt.show()
+
+import sys
+sys.exit()
+	'''
+	#t1 = time.time()

@@ -1,0 +1,116 @@
+import pandas as pd
+import os.path
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from numpy import array
+from keras.models import load_model
+import matplotlib.pyplot as plt
+
+from keras.layers import Dense
+from keras.layers import LSTM
+from numpy import array
+from keras.models import load_model
+
+'''
+# return training data
+def get_train():
+	seq = [[0.0, 0.1], [0.1, 0.2], [0.2, 0.3], [0.3, 0.4], [0.4, 0.5]]
+	seq = array(seq)
+	X, y = seq[:, 0], seq[:, 1]
+	X = X.reshape((len(X), 1, 1))
+	return X, y
+ 
+# define model
+model = Sequential()
+model.add(LSTM(200, input_shape=(1,1)))
+model.add(Dense(1, activation='linear'))
+# compile model
+model.compile(loss='mse', optimizer='adam')
+# fit model
+X,y = get_train()
+model.fit(X, y, epochs=300, shuffle=False, verbose=0)
+# save model to single file
+model.save('lstm_model.h5')
+ 
+# snip...
+# later, perhaps run from another script
+ 
+# load model from single file
+model = load_model('lstm_model.h5')
+# make predictions
+yhat = model.predict(X, verbose=0)
+print(yhat)
+plt.plot(y)
+plt.plot(yhat)
+plt.show()
+'''
+np.random.seed(7)
+Dir = '/home/social-sim/Desktop/SocialSimCodeTesting/Pop_MLearning/10days100repo-fork/'
+Fls = os.listdir(Dir)
+Data = []
+for _,f in enumerate(Fls):
+	data = pd.read_csv(Dir + f)
+	Data.append(data.ix[:,1].tolist())
+Data = np.array(Data)
+y =  Data[1:,:]
+#y = y/max(y)
+#Maxy = max(y)
+X = Data[:-1, :]
+#X = X/max(y)
+X = X.reshape((len(X), 1, 1))
+
+seq = [[0.0, 0.1], [0.1, 0.2], [0.2, 0.3], [0.3, 0.4], [0.4, 0.5]]
+seq = array(seq)
+#x = np.arange(0, 4, 0.1)
+#X, y = seq[:,0], seq[:,1]#x, np.sin(3*x)#seq[:, 0], np.sin(5*seq[:, 0])
+print(y)
+X = X.reshape((1, X.shape[0], X.shape[1]))
+
+
+plt.plot(y)
+from keras import optimizers
+
+# define model
+model = Sequential()
+model.add(LSTM(40, input_shape=(X.shape[1],X.shape[0])))
+model.add(Dense(1, activation='linear'))
+sgd = optimizers.SGD(lr=0.001, decay=1e-3, momentum=0.9, nesterov=True)
+# compile model
+model.compile(loss='mse', optimizer='adam')
+
+#model.fit(X, y, epochs=2*5*2000, shuffle=False, verbose=1)
+model.fit(X, y, epochs=10*300, shuffle=False, verbose=1)
+
+yhat = model.predict(X, verbose=0)
+#print(yhat)
+plt.plot(yhat)
+plt.show()
+
+
+'''
+df = pd.read_csv('/home/social-sim/Desktop/SocialSimCodeTesting/Pop_MLearning/10days100repo-fork/2015-02-1.csv')
+df=df.loc[df['2015-02-1']>0]
+#dfList = df[]
+files =[]
+for i in range(0,9):
+	for j in range(0,4):
+			files.append('10days100repo-fork/2015-0%d-%d.csv' %(i,j))
+#print(files)
+for i in files:
+	if os.path.isfile(i):
+		print('%s is' %i)
+		df2=pd.read_csv(i)
+		df = pd.merge(df,df,on='name_h')
+
+df.to_csv('merged_files.csv',index=False)
+'''
+
+'''
+print(Data.shape)
+f, ax = plt.subplots(10,sharex=True)
+for i in range(10):
+	ax[i].plot(Data[:,i])
+plt.show()
+'''
